@@ -561,8 +561,8 @@ def merge_puntaje(drive_files,on_left='WOS',on_right='UDEA',
                   titlec='UDEA_TI',
                   authorc='UDEA_nombre',
                   authorsc='UDEA_autores',
+                  Tipo='Tipo',
                   UDEA_normalization={'UDEA_pais prod':'UDEA_país','UDEA_puntos':'UDEA_ptos'}):
-    on_right_prexif=on_right+'_'
     on_left_on_right=on_left+'_'+on_right
     
     #*** on_right *****
@@ -625,15 +625,15 @@ def merge_puntaje(drive_files,on_left='WOS',on_right='UDEA',
     else:
         UDEA_PTJ_NOT    =drive_files.biblio[on_left]
         UDEA_PTJ=pd.DataFrame()
-   
+        
+
+    print('va1',UDEA_PTJ[    UDEA_PTJ[    authorc]==''].shape[0],
+          UDEA_PTJ_NOT[UDEA_PTJ_NOT[authorc]==''].shape[0])
+        
+    UDEA_PTJ_NOT=clean_institutional_columns(UDEA_PTJ_NOT,prefix=on_right,Tipo=Tipo)
     drive_files.biblio[on_left]=UDEA_PTJ_NOT
-
-    udea_columns=[c for c in drive_files.biblio[on_left].columns if c.find(on_right_prexif)>-1]
-
-    drive_files.biblio[on_left]=drive_files.biblio[on_left].drop( udea_columns, axis='columns' )
     
     #*** END on_left ***
-
     kk=drive_files.merge(left=on_left, right=on_right,
                          left_DOI=left_DOI, left_TI=left_TI,
                          right_DOI=UDEA_doi, right_TI=right_TI,
@@ -643,27 +643,26 @@ def merge_puntaje(drive_files,on_left='WOS',on_right='UDEA',
                          right_extra_journal=right_extra_journal
                          )
     
-    newwos=drive_files.biblio[on_left_on_right][drive_files.biblio[on_left_on_right].Tipo!=on_right]
+    newwos=drive_files.biblio[on_left_on_right][drive_files.biblio[on_left_on_right][Tipo]!=on_right]
     
-    app_to_UDEA_PTJ=newwos[newwos.Tipo.str.contains(on_right)].reset_index(drop=True)
+    app_to_UDEA_PTJ=newwos[newwos[Tipo].str.contains(on_right)].reset_index(drop=True)
 
-    new_UDEA_not_PTJ=newwos[~newwos.Tipo.str.contains(on_right)].reset_index(drop=True)
+    new_UDEA_not_PTJ=newwos[~newwos[Tipo].str.contains(on_right)].reset_index(drop=True)
     print(7258,':',new_UDEA_not_PTJ.shape[0],'+',app_to_UDEA_PTJ.shape[0],'=',
           new_UDEA_not_PTJ.shape[0]+app_to_UDEA_PTJ.shape[0])
 
-    drive_files.biblio[on_left]=new_UDEA_not_PTJ
+    print('va2',app_to_UDEA_PTJ[  app_to_UDEA_PTJ[authorc]==''].shape[0],
+               new_UDEA_not_PTJ[new_UDEA_not_PTJ[authorc]==''].shape[0])
 
-    drive_files.biblio[on_left]=drive_files.biblio[on_left].drop( 
-         [ c for c in drive_files.biblio[on_left].columns if c.find(on_right_prexif)>-1  ],
-           axis='columns')
+    
+    new_UDEA_not_PTJ=clean_institutional_columns(new_UDEA_not_PTJ,prefix=on_right,Tipo=Tipo)
+    drive_files.biblio[on_left]=new_UDEA_not_PTJ
     
     i=1
     drive_files.biblio[on_right][right_TI]=drive_files.biblio[on_right][UDEA_title_list].str[i]
 
     drive_files.biblio[on_right]=wp.fill_NaN(drive_files.biblio[on_right])
     drive_files.biblio[on_left] =wp.fill_NaN(drive_files.biblio[on_left])    
-    drive_files.UDEA=drive_files.biblio[on_right]
-    drive_files.WOS =drive_files.biblio[on_left]    
 
     kk=drive_files.merge(left=on_left, right=on_right,
                          left_DOI=left_DOI, left_TI=left_TI,
@@ -676,25 +675,24 @@ def merge_puntaje(drive_files,on_left='WOS',on_right='UDEA',
 
     newwos=drive_files.biblio[on_left_on_right][drive_files.biblio[on_left_on_right].Tipo!=on_right]
 
-    app_to_UDEA_PTJ_2=newwos[newwos.Tipo.str.contains(on_right)].reset_index(drop=True)
+    app_to_UDEA_PTJ_2=newwos[newwos[Tipo].str.contains(on_right)].reset_index(drop=True)
     app_to_UDEA_PTJ_2.shape
 
-    new_UDEA_not_PTJ=newwos[~newwos.Tipo.str.contains(on_right)].reset_index(drop=True)
+    new_UDEA_not_PTJ=newwos[~newwos[Tipo].str.contains(on_right)].reset_index(drop=True)
     new_UDEA_not_PTJ.shape[0]+app_to_UDEA_PTJ.shape[0]
 
     print(7258,':',new_UDEA_not_PTJ.shape[0],'+',app_to_UDEA_PTJ_2.shape[0],'=',
           new_UDEA_not_PTJ.shape[0]+app_to_UDEA_PTJ_2.shape[0])
 
+    print('va3',app_to_UDEA_PTJ_2[app_to_UDEA_PTJ_2[authorc]==''].shape[0],
+               new_UDEA_not_PTJ[ new_UDEA_not_PTJ[ authorc]==''].shape[0])    
+    
+    new_UDEA_not_PTJ=clean_institutional_columns(new_UDEA_not_PTJ,prefix=on_right,Tipo=Tipo)
     drive_files.biblio[on_left]=new_UDEA_not_PTJ
-
-    drive_files.biblio[on_left]=drive_files.biblio[on_left].drop( 
-         [ c for c in drive_files.biblio[on_left].columns if c.find(on_right_prexif)>-1  ],
-           axis='columns')
-    drive_files.biblio[on_left].shape
 
     drive_files.biblio[on_right]=wp.fill_NaN(drive_files.biblio[on_right])
     drive_files.biblio[on_left] =wp.fill_NaN(drive_files.biblio[on_left])    
-
+    
     kk=drive_files.merge(left=on_left, right=on_right,
                          left_DOI=left_DOI, left_TI=left_TI,
                          right_DOI=UDEA_doi, right_TI=UDEA_title,
@@ -706,12 +704,15 @@ def merge_puntaje(drive_files,on_left='WOS',on_right='UDEA',
 
     newwos=drive_files.WOS_UDEA[drive_files.WOS_UDEA.Tipo!=on_right]
 
-    app_to_UDEA_PTJ_tot=newwos[newwos.Tipo.str.contains(on_right)].reset_index(drop=True)
+    app_to_UDEA_PTJ_tot=newwos[newwos[Tipo].str.contains(on_right)].reset_index(drop=True)
 
-    new_UDEA_not_PTJ=newwos[~newwos.Tipo.str.contains(on_right)].reset_index(drop=True)
+    new_UDEA_not_PTJ=newwos[~newwos[Tipo].str.contains(on_right)].reset_index(drop=True)
     new_UDEA_not_PTJ.shape[0]+app_to_UDEA_PTJ_tot.shape[0]
-    new_UDEA_not_PTJ=new_UDEA_not_PTJ.drop(
-        [ c for c in new_UDEA_not_PTJ.columns if c.find(on_right_prexif)>-1  ],axis='columns')
+
+    print('va4',app_to_UDEA_PTJ_tot[app_to_UDEA_PTJ_tot[authorc]==''].shape[0],
+               new_UDEA_not_PTJ[   new_UDEA_not_PTJ[   authorc]==''].shape[0])    
+    
+    new_UDEA_not_PTJ=clean_institutional_columns(new_UDEA_not_PTJ,prefix=on_right,Tipo=Tipo)
 
     print(7258,':',new_UDEA_not_PTJ.shape[0],'+',app_to_UDEA_PTJ_tot.shape[0],'=',
           new_UDEA_not_PTJ.shape[0]+app_to_UDEA_PTJ_tot.shape[0])
@@ -723,11 +724,15 @@ def merge_puntaje(drive_files,on_left='WOS',on_right='UDEA',
     new_UDEA_PTJ=new_UDEA_PTJ.rename(UDEA_normalization,axis='columns')
     
 
-
     print(new_UDEA_PTJ.shape,'+',new_UDEA_not_PTJ.shape,'=',
      new_UDEA_PTJ.shape[0]+new_UDEA_not_PTJ.shape[0])
 
-
+    
     UDEA=UDEA_PTJ.append( new_UDEA_PTJ.append( new_UDEA_not_PTJ,sort=False ),
                          sort=False ).reset_index(drop=True)
-    return UDEA    
+    return UDEA
+
+def clean_institutional_columns(df,prefix='UDEA',Tipo='Tipo'):
+    df=df.drop([ c for c in df.columns if c.find('{}_'.format(prefix))>-1  ],axis='columns')
+    df[Tipo]=df[Tipo].str.replace('_{0,1}%s' %prefix,'')
+    return df
