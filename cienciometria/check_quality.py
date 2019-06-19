@@ -37,9 +37,3 @@ def check_quality(df,
                    d.get('NOMBRE COMPLETO')])>0
                )].shape[0]
         print(x)
-        
-
-
-        
-    print('TI: "The inert doublet model" check WOS_author vs UDEA_authors')
-    print('...')
