@@ -134,7 +134,7 @@ def update_institutional_authors(kkn,AU,authors_column='UDEA_authors',authors_co
     AU_columns=list( AU.columns.values )
 
     AU[full_name]=(AU[AU_first_last_name]+' '+AU[AU_second_last_name]+' '+AU[AU_first_names]
-                  ).str.lower().str.strip().apply( unidecode.unidecode )
+                  ).str.lower().str.strip().str.replace('\s+',' ').apply( unidecode.unidecode )    
 
     maxau=kkn[authors_column].apply(lambda l: [d.get(full_name) for d in l ] 
                                     if type(l)==list else []).apply(len).max()
@@ -144,8 +144,10 @@ def update_institutional_authors(kkn,AU,authors_column='UDEA_authors',authors_co
         print(i)
         kkn[full_name]=kkn[authors_column].apply(lambda l: [d.get(authors_column_key) for d in l ]
                         if type(l)==list else ''
-                            ).str[i].apply( lambda s: unidecode.unidecode( s.lower().strip()) 
+                            ).str[i].apply( lambda s: re.sub('\s+',' ',  
+                                                      unidecode.unidecode( s.lower().strip()) )
                                                       if not pd.isna(s) else s)
+        
         if not kkn[~kkn[full_name].isna()].empty:
             kkn=kkn.merge(AU[newcolumns],on=full_name,how='left').reset_index(drop=True)
             kkn=dictionary_list_add_columns(kkn,authors_column,authors_column_key,i,AU_columns)
@@ -235,6 +237,16 @@ def wos_names_list(dy ,y_keys=['PRIMER APELLIDO','NOMBRES','INICIALES','SEGUNDO 
         wos_names=wos_names_append(wos_names,last_names,first_names,initials)
     return wos_names
     
+def creates_or_append_list(y,i,wos_name,WOS_affiliation,xy_keys=['WOS_author', 'WOS_affiliation']):
+    for jk in range(2):
+        if type(y[i])==dict and type(y[i].get(  xy_keys[jk] ))!=list:
+            y[i][  xy_keys[jk] ] =[]
+        if type(y[i].get(  xy_keys[0] ))==list and wos_name not in y[i].get(  xy_keys[0] ):
+            y[i][  xy_keys[0] ]=y[i][  xy_keys[0] ]+[ wos_name ]
+        if type(y[i].get(  xy_keys[1] ))==list and WOS_affiliation[0] not in y[i].get(  xy_keys[1] ):
+            y[i][  xy_keys[1] ]=y[i][  xy_keys[1] ]+WOS_affiliation
+    return y
+
 def combinewos(x,y,x_keys=['WOS_author','affiliation'],
                    y_keys=['PRIMER APELLIDO','NOMBRES','INICIALES','SEGUNDO APELLIDO','full_name'],
                    xy_keys=['WOS_author','WOS_affiliation']):
@@ -245,8 +257,7 @@ def combinewos(x,y,x_keys=['WOS_author','affiliation'],
             # Try by buildinng spanish-like names list                                
             for i in range( len(y) ):
                 if wos_name.title() in wos_names_list(y[i] ,y_keys):
-                    y[i][  xy_keys[0] ]=[ wos_name ]
-                    y[i][  xy_keys[1] ]=WOS_affiliation
+                    y=creates_or_append_list(y,i,wos_name,WOS_affiliation,xy_keys)
                     break
             #Try again but comparing full lists
             wos_name_to_list=wos_name.replace(',','').replace('-',' ').title().split()
@@ -257,37 +268,31 @@ def combinewos(x,y,x_keys=['WOS_author','affiliation'],
                 else:
                     yi_to_list=[]
                 if not pd.np.setdiff1d(wos_name_to_list,yi_to_list).shape[0]:
-                    y[i][  xy_keys[0] ]=[ wos_name ]
-                    y[i][  xy_keys[1] ]=WOS_affiliation
+                    y=creates_or_append_list(y,i,wos_name,WOS_affiliation,xy_keys)
                     break
             #Try again but comparing full lists with initials
             wos_name_to_list=wos_name.replace(',','').replace('-',' ').title().split()
             for i in range( len(y) ):
                 yi_to_list=[y[i][y_keys[0]],y[i][y_keys[3]] ]+y[i][y_keys[2]].split()
                 if not pd.np.setdiff1d(wos_name_to_list,yi_to_list).shape[0]:
-                    y[i][  xy_keys[0] ]=[ wos_name ]
-                    y[i][  xy_keys[1] ]=WOS_affiliation
+                    y=creates_or_append_list(y,i,wos_name,WOS_affiliation,xy_keys)
                     break
             #Try again but comparing full lists with first first name and initial
             for i in range( len(y) ):
                 yi_to_list=[y[i][y_keys[0]],y[i][y_keys[3]],y[i][y_keys[1]].split()[0],
                               y[i][y_keys[2]].split()[-1]]
                 if not pd.np.setdiff1d(wos_name_to_list,yi_to_list).shape[0]:
-                    y[i][  xy_keys[0] ]=[ wos_name ]
-                    y[i][  xy_keys[1] ]=WOS_affiliation
+                    y=creates_or_append_list(y,i,wos_name,WOS_affiliation,xy_keys)
                     break                    
             #Try again but comparing full lists with second first name and initial
             for i in range( len(y) ):
                 yi_to_list=[y[i][y_keys[0]],y[i][y_keys[3]],y[i][y_keys[1]].split()[-1],
                               y[i][y_keys[2]].split()[0]]
                 if not pd.np.setdiff1d(wos_name_to_list,yi_to_list).shape[0]:
-                    y[i][  xy_keys[0] ]=[ wos_name ]
-                    y[i][  xy_keys[1] ]=WOS_affiliation
+                    y=creates_or_append_list(y,i,wos_name,WOS_affiliation,xy_keys)
                     break                    
-                    
-                    
+                            
     return y
-
 def extract_internal_value_of_a_dictionary_key_in_a_list_of_dictionaries(df,
     list_of_dictionaries='UDEA_authors',
     dictionary_key='WOS_author'):
