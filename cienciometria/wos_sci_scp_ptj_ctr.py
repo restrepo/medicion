@@ -741,3 +741,96 @@ def clean_institutional_columns(df,prefix='UDEA',Tipo='Tipo'):
     df=df.drop([ c for c in df.columns if c.find('{}_'.format(prefix))>-1  ],axis='columns')
     df[Tipo]=df[Tipo].str.replace('_{0,1}%s' %prefix,'')
     return df
+
+def AU_to_author_WOS(wos_au,au_info,c1_old,affil='Univ Antioquia',extra_affil=', Medellín, Colombia'):
+    """
+    From the information of 'AU' and 'C1' of a WOS database, generates de 'authors_WOS' list
+    of dictionaries
+    """
+    AUWOS=False
+    AFFIL=False
+    wn=wos_names_list(au_info)
+    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(),n)  
+            for n in wn if n.find('.')>-1]    
+    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(), 
+                   n.replace('. ','.').replace('.',''))  
+            for n in wn if n.find('.')>-1]
+    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(), 
+                   n.replace('. ','.').replace('.','').replace('-',' '))  
+            for n in wn if n.find('.')>-1]
+    wos_author_list=wos_au.strip().split('\n')
+    mtch=np.intersect1d(wos_author_list,wn)
+    #Try again without UNICODE characters:
+    if len(mtch)==0:
+        wos_au=unidecode.unidecode(wos_au)
+        wos_author_list=wos_au.strip().split('\n')
+        mtch=np.intersect1d(wos_author_list,wn)
+    #Finally matched!:
+    if len(mtch)==1:
+        AUWOS=True
+        full_affs=c1_old.strip().split('\n') 
+        affs=[ c1 for c1 in full_affs 
+                 if c1.find(affil)>-1]
+        #Cases:
+        # 1. Single match
+        if len(affs)==1:
+            AFFIL=True
+            aff=affs
+        elif len(affs)>1:
+            # 2 Ordered mathc
+            try: 
+                #exact match or first one: idx_au=0
+                idx_au=wos_author_list.index(mtch[0])
+                if full_affs[idx_au].find(affil)>-1:
+                    AFFIL=True
+                    aff=[full_affs[idx_au]]
+            except:
+                try:
+                    #last one:
+                    idx_au=wos_author_list.index(mtch[0])
+                    if idx_au==len(wos_author_list)-1:
+                        if full_affs[-1].find(affil)>-1:
+                            AFFIL=True
+                            aff=[full_affs[-1]]
+                except:
+                    pass
+        # 3. One of the very similar matches
+        
+        
+    auwos={}    
+    if AUWOS:
+        #renormalize to WOS C1 standars
+        wos_author=re.sub('^(\w+)\s(\w+,)'               ,r'\1-\2'  ,
+                   re.sub('(\s[A-ZÁÉÍÓÚÑ])([A-ZÁÉÍÓÚÑ])$',r'\1. \2.',
+                   re.sub('(\s[A-ZÁÉÍÓÚÑ])$'             ,r'\1.',mtch[0],
+                                                             re.UNICODE),
+                                                             re.UNICODE),
+                                                             re.UNICODE)
+        auwos['WOS_author']=wos_author
+        auwos['origin']='from AU+UDEA_authors'
+        if AFFIL:
+            auwos['affiliation']=aff
+        else:
+            auwos['affiliation']=[affil+extra_affil]
+    return auwos
+
+def authors_Wos_from_bad_AU_and_bad_C1(row,authors_WOS_col='authors_WOS',
+                                           AU_col='AU',C1_col='C1',
+                                           UDEA_authors_col='UDEA_authors'):
+    '''
+    Use poor normalized "AU" and "C1" columns from WOS to 
+    generate proper normalized "authors_WOS column"
+    '''
+    if row[authors_WOS_col]:
+        return row[authors_WOS_col]
+    
+    awl=row[UDEA_authors_col]
+    author_wos_list=[]
+    if awl:
+
+        for j in range(len(awl)):
+            auudea=dict(awl[j])
+            auwos=AU_to_author_WOS( row[AU_col],auudea,row[C1_col])
+            if auwos and auwos not in author_wos_list:
+                author_wos_list=author_wos_list+[auwos]
+    return author_wos_list
