@@ -984,3 +984,68 @@ def json_fuzzy_merge(row,UDEA,contents,right_target='UDEA_authors',
         return newl
     else:
         return None
+
+def build_institutional_authors(x,author_df,x_author_key='WOS_author',x_affiliation_key='affiliation',
+                                        author_key='WOS_author',
+                                        affiliation_key='WOS_affiliation'):
+    '''
+    Same function that 
+    get_UDEA_authors?? 
+    but for apply instead of combine
+    '''
+    if type(x)!=list:
+        return None
+    ll=[]
+    for j in range(len(x)):
+        
+                                #author_WOS→affiliation always have single affiliation
+        kk=find_author_affiliation(x[j].get(x_author_key),x[j].get(x_affiliation_key)[0],
+                                        author_df=author_df,
+                                        author_key=author_key,
+                                        affiliation_key=affiliation_key,
+                                        ratio=0.9 )
+        if kk:
+            ll.append(kk)
+    if not ll:
+        ll=None
+    return ll
+
+def check_quality(df,
+     authors_WOS='authors_WOS',
+     Tipo='Tipo',
+     UDEA_authors='UDEA_authors'
+    ):
+    import pandas as pd
+    if authors_WOS in df.columns:
+        print(authors_WOS)
+        x=df[authors_WOS].apply(lambda l:
+                 l if type(l)==list
+                 and len(l)>0 else None
+                    ).dropna().shape[0]
+        print(x)
+        kk=df[df['TI']=='Leptonic charged Higgs decays in the Zee model'].reset_index(drop=True)
+        print(kk.loc[0,'TI'],'; authors_WOS:',kk.loc[0,authors_WOS],'; AU:',kk.loc[0,'AU'])
+    if Tipo in df.columns:        
+        print('Tipo contains UDEA')
+        x=df[df[Tipo].str.contains(
+             'UDEA')].shape[0]
+        print(x)
+    if UDEA_authors in df.columns:
+        print(UDEA_authors)
+        kk=df[UDEA_authors].apply(lambda l:
+             l if type(l)==list
+             and len(l)>0 else None
+                ).dropna().reset_index(drop=True)
+        print(kk.shape[0])
+
+        print('UDEA_authors → full_names (Extrapolado puntaje)')
+        x=kk[kk.apply(lambda l: len([1 for d in l if 
+                   d.get('full_name')])>0
+               )].shape[0]
+        print(x)
+    
+        print('UDEA_authors → "NOMBRE COMPLETO" (Extrapolado CENTRO)')
+        x=kk[kk.apply(lambda l: len([1 for d in l if 
+                   d.get('NOMBRE COMPLETO')])>0
+               )].shape[0]
+        print(x)
