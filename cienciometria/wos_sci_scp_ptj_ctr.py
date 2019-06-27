@@ -1,5 +1,7 @@
 import unidecode
 import Levenshtein as lv
+import fuzzywuzzy.process as fwp
+from fuzzywuzzy import fuzz
 import wosplus as wp
 import numpy as np
 import pandas as pd
@@ -750,14 +752,12 @@ def AU_to_author_WOS(wos_au,au_info,c1_old,affil='Univ Antioquia',extra_affil=',
     AUWOS=False
     AFFIL=False
     wn=wos_names_list(au_info)
-    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(),n)  
-            for n in wn if n.find('.')>-1]    
-    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(), 
-                   n.replace('. ','.').replace('.',''))  
+    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(),n,re.UNICODE)  
+            for n in wn if re.search('Mc\w',n,re.UNICODE)]    
+    wn=wn+[ n.replace('. ','.').replace('.','')  
             for n in wn if n.find('.')>-1]
-    wn=wn+[ re.sub( 'Mc(\w)',lambda s: 'Mc'+s.group(1).upper(), 
-                   n.replace('. ','.').replace('.','').replace('-',' '))  
-            for n in wn if n.find('.')>-1]
+    wn=wn+[ n.replace('-',' ')  
+            for n in wn if n.find('-')>-1]
     wos_author_list=wos_au.strip().split('\n')
     mtch=np.intersect1d(wos_author_list,wn)
     #Try again without UNICODE characters:
@@ -834,3 +834,153 @@ def authors_Wos_from_bad_AU_and_bad_C1(row,authors_WOS_col='authors_WOS',
             if auwos and auwos not in author_wos_list:
                 author_wos_list=author_wos_list+[auwos]
     return author_wos_list
+
+def author_quality_match(x,y,scorer=fuzz.token_set_ratio):
+    
+    chk={}
+    chk['simple_wos']=unidecode.unidecode(x).lower().replace(
+                       '.','').replace(',','').replace('-',' ')
+    chk['full_name']=unidecode.unidecode(y).lower().replace(
+                       '.','').replace(',','').replace('-',' ')
+    sn=re.sub('^(\w+\s+\w+\s+\w)\w+(\s+\w)\w+$',r'\1\2',chk['full_name'])
+    chk['short_name']=re.sub('^(\w+\s+\w+\s+\w)\w+$',r'\1',sn)
+    sn=re.sub('^(\w+\s+)\w+\s+(\w+)\s+\w+$',r'\1\2',chk['full_name'])
+    chk['simple_name']=re.sub('^(\w+\s+)\w+\s+(\w+)$',r'\1\2',sn)
+    chk['simple_second_name']=re.sub('^(\w+\s+)\w+\s+\w+\s+(\w+)$',r'\1\2',chk['full_name'])
+    chk['last_name']=re.sub( '^(\w+\s+)\w+\s+(\w+\s+\w+)$',r'\1\2', chk['full_name'] )
+    chk['last_names']=re.sub('^(\w+\s+\w+\s+\w+)\s+\w+$',r'\1',chk['full_name'])
+    chk['second_name']=re.sub('^(\w+\s+\w+\s+)\w+\s+(\w+)$',r'\1\2',chk['full_name'])
+
+    chk['s1']=fuzz.token_sort_ratio( chk['simple_wos'],chk['full_name'])
+    chk['s1b']=fuzz.partial_token_sort_ratio( chk['simple_wos'],chk['full_name'])
+    chk['s2']=scorer( chk['simple_wos'],chk['short_name'])
+    chk['s3']=fuzz.ratio( chk['simple_wos'],chk['simple_name'])
+    chk['s3']=fuzz.ratio( chk['simple_wos'],chk['simple_second_name'])
+    chk['s4']=fuzz.token_sort_ratio( chk['simple_wos'],chk['last_name'])
+    chk['s5']=fuzz.token_sort_ratio(chk['simple_wos'],chk['last_names'])    
+    chk['s6']=fuzz.token_sort_ratio(chk['simple_wos'],chk['second_name'])
+    
+    chk['max']=max( chk['s1'],chk['s1b'],chk['s2'],chk['s3'],chk['s4'],chk['s5'],chk['s6'])
+    
+    return chk
+
+#for i in range(20):
+#l=dfnot['authors_WOS'].loc[i]
+#93,70
+
+def json_fuzzy_merge_full(row,contents,left_target='authors_WOS',right_target='UDEA_authors',
+                       left_on='WOS_author',extra_left_on='affiliation',
+                       right_on='WOS_author',extra_right_on='WOS_affiliation',
+                       cutoff=95,cutoff_extra=65,scorer=fuzz.partial_ratio,
+                         full_name='full_name',quality_cutoff=75):
+
+    
+    l=row[left_target]
+    newl=[]
+    if row[right_target]:
+        newl=row[right_target]
+        return newl
+    
+    for d in l:
+        au=d.get(left_on)
+        aff=d.get(extra_left_on)
+        # Do not need to be string
+        r=fwp.extractOne(au,contents[right_on],scorer=scorer)
+        if r[1]>=cutoff:
+            raf=scorer( aff, contents.loc[r[2],extra_right_on]  )
+            fn=contents.loc[r[2],full_name]
+            chk=author_quality_match(au,fn)
+            if chk['max']<quality_cutoff:
+                raf=cutoff_extra-1
+            if raf>=cutoff_extra:
+                mthchedd=contents.loc[r[2],right_target]
+                mthchedd['from_author_WOS_WOS_author']=au
+                newl=newl+[ mthchedd   ]
+    if newl:
+        return newl
+    else:
+        return None
+
+def json_fuzzy_merge(row,UDEA,contents,right_target='UDEA_authors',
+                       left_on='WOS_author',extra_left_on='affiliation',
+                       right_on='WOS_author',extra_right_on='WOS_affiliation',
+                       extra_extra_right_on='full_name',
+                       cutoff=93,
+                       cutoff_author=90,
+                       cutoff_affiliation=70,scorer=fuzz.token_set_ratio,
+                       DEBUG=False):
+    l=row['authors_WOS']
+    so=row['SO']
+    newl=[]
+    if row[right_target]:
+        return row[right_target]
+        
+    for d in l:
+        AUTHOR=False
+        AFFILIATION=False
+        JOURNAL=True
+
+        dfraf=pd.DataFrame()
+        au=d.get(left_on)
+        aff=d.get(extra_left_on)[0]
+        Q=1
+        # Try match author to a good degree
+        rau=fwp.extractOne(au,contents[right_on].apply(pd.Series).stack().unique(),scorer=scorer)
+        if DEBUG: print(1,rau)
+        if rau[1]>=cutoff:
+            AUTHOR=True
+        #Try match author with less quality: Q
+        else:
+            rau=fwp.extractOne(au,contents[right_on].apply(pd.Series).stack().unique(),
+                       scorer=fuzz.partial_token_sort_ratio)
+            if DEBUG: print(1.1,rau)            
+            if rau and rau[1]>=cutoff:
+                Q=Q-0.1
+                AUTHOR=True
+        if DEBUG: print(1.2,'AUTHOR:',AUTHOR)                            
+        if AUTHOR:
+            dfraf=contents[contents[right_on].apply( lambda l: rau[0] in l )
+                                ].reset_index(drop=True)
+            full_name=dfraf[right_target].loc[0].get(extra_extra_right_on)
+            chk=author_quality_match(au,full_name,scorer=scorer)
+            if DEBUG: print(1.3,'chk max:',chk['max'])
+            if chk['max']<cutoff_author:
+                AUTHOR=False
+        if AUTHOR:
+            raf=fwp.extractOne(aff,dfraf[extra_right_on].loc[0],scorer=fuzz.ratio)
+            if DEBUG: print(2,raf)
+            if raf and raf[1]>=cutoff_affiliation:
+                AFFILIATION=True
+            else:
+                Q=Q-0.1
+                raf=fwp.extractOne(aff,dfraf[extra_right_on].loc[0],
+                                   scorer=fuzz.partial_token_set_ratio)
+                if DEBUG: print(2.1,raf)
+                if raf and raf[1]>=cutoff_affiliation:
+                    AFFILIATION=True
+
+        if DEBUG: print(2.2,'AFFILIATION:',AFFILIATION,'Q:',Q)                
+        if AUTHOR and Q<1:
+            cutoff_so=50
+            if Q<0.9:
+                cutoff_so=60
+            if not dfraf.empty and full_name:
+                kkk=UDEA[UDEA['UDEA_nombre'].fillna('').str.contains(full_name)
+                                ].reset_index(drop=True)
+                rso=fwp.extractOne( so,   kkk.SO, scorer=scorer)
+                if not rso:
+                    JOURNAL=False
+                elif rso[1]<cutoff_so:
+                    JOURNAL=False
+            else:
+                JOURNAL=False
+        if DEBUG: print(3,'JOURNAL',JOURNAL)                
+        if AUTHOR and AFFILIATION and JOURNAL:
+            mthchedd=dfraf.loc[0,right_target]
+            mthchedd['from_author_WOS_WOS_author']=au
+            newl=newl+[  mthchedd  ]            
+            #print('{} → {}'.format(au,newl[0][extra_extra_right_on]) ) 
+    if newl:
+        return newl
+    else:
+        return None
